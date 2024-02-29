@@ -30,6 +30,7 @@ def parse_file(infile):
 
 
 def parse_hexfile(f):
+    print("parse_hexfile")
     data = []
     for row in f:
         row = row.replace(' ', '').strip()
@@ -41,11 +42,15 @@ def parse_hexfile(f):
 
 
 def parse_kissfile(infile):
+    print("parse_kissfile")
     data = []
     for row in infile.read().split(b'\xC0'):
         if len(row) == 0 or row[0] != 0:
             continue
-        data.append(row[1:].replace(b'\xdb\xdc', b'\xc0').replace(b'\xdb\xdd', b'\xdb').hex(bytes_per_sep=2))
+        
+        parsed = row[1:].replace(b'\xdb\xdc', b'\xc0').replace(b'\xdb\xdd', b'\xdb').hex(bytes_per_sep=2)
+        data.append(parsed)
+
     return data
 
 
@@ -55,20 +60,39 @@ def parse_frames(data):
     hr = False
     for row in data:
         if row[16:22].upper() == 'FFD8FF':
-            offset = int((row[12:14] + row[10:12]), 16)
+            offset = int((row[14:16]+ row[12:14] + row[10:12]), 16)
             hr = row[6:10].upper() == '2098'
             break
+
+    if hr:
+        print("WARNING high resolution image")
+
+    addresses = set()
+
     for row in data:
+            
         cmd = row[0:4]
-        if hr:
-            addr = int((row[14:16] + row[12:14] + row[10:12]), 16)
-        else:
-            addr = int((row[12:14] + row[10:12]), 16) - offset
+        addr = int((row[14:16] + row[12:14] + row[10:12]), 16) - offset
         dlen = (int(row[4:6], 16) + 2) * 2
         payload = row[16:dlen]
+        # if dlen != 56:
+        #     print("WARNING length is not 56 but", dlen)
+
         if cmd == '0200' and addr >= 0:
             image.seek(addr)
             image.write(bytes.fromhex(payload))
+            addresses.add(addr)
+
+    print("max address", max(addresses))
+    i=0;
+    while len(addresses) > 0:
+        if not i in addresses:
+            print("missing block", i)
+            break
+        else:
+            addresses.remove(i)
+        i+=56
+
     return image
 
 
